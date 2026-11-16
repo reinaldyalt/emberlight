@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberlight — keep your light alive</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #070510; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; }
+  #wrap { position: relative; line-height: 0; }
+  canvas { display: block; width: 960px; height: 640px; background: #070510; border-radius: 6px; }
+  #status { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  #hint { position: absolute; left: 0; right: 0; bottom: -28px; text-align: center; color: #8d8779; font-size: 13px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="640" aria-label="Emberlight game"></canvas>
+  <p id="status" aria-live="polite"></p>
+  <p id="hint">Mouse or arrow keys to drift &middot; Space to start &middot; P to pause &middot; M to mute</p>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
