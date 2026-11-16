@@ -119,7 +119,10 @@ function runGame() {
     const direction = input.direction();
     const mouse = input.mouse();
     const events = world.step(STEP, direction, mouse, true);
-    if (events & EVENT_PICKUP) audio.pickup(world.state.combo);
+    if (events & EVENT_PICKUP) {
+      if (world.state.lastGolden) audio.golden();
+      else audio.pickup(world.state.combo);
+    }
     if (events & EVENT_LEVEL) audio.levelUp();
     if (events & EVENT_HIT) audio.hit();
     if (events & EVENT_OVER) endGame();

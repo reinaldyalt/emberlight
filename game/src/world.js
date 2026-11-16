@@ -8,15 +8,18 @@
 // dark closes in. You lose when your light reaches nothing or your lives run out.
 import {
   ASTEROID,
+  ASTEROID_TINTS,
   COMBO,
   COMET,
   EMBER,
   FIELD,
+  GOLDEN,
   LEVEL_BONUS,
   LEVEL_EMBERS,
   LIGHT,
   LIVES,
   NOVA_POINTS,
+  PLAY_TOP,
   POWER,
   SHIP,
   STEP,
@@ -68,8 +71,11 @@ export function createWorld(random) {
     items: [],
     particles: [],
     floats: [],
+    rings: [],
     stars: [],
     nebulae: [],
+    shooting: null,
+    lastGolden: false,
     shake: 0,
     novaFlash: 0,
     levelBanner: 0,
@@ -86,9 +92,9 @@ export function createWorld(random) {
   function seedSky() {
     state.stars = [];
     const layers = [
-      { count: 70, speed: 6, size: 1, bright: 0.5 },
-      { count: 45, speed: 14, size: 1.6, bright: 0.75 },
-      { count: 22, speed: 26, size: 2.4, bright: 1 },
+      { count: 85, speed: 6, size: 1, bright: 0.5 },
+      { count: 55, speed: 14, size: 1.6, bright: 0.75 },
+      { count: 28, speed: 26, size: 2.4, bright: 1 },
     ];
     for (const layer of layers) {
       for (let i = 0; i < layer.count; i += 1) {
@@ -102,16 +108,17 @@ export function createWorld(random) {
         });
       }
     }
-    const hues = [265, 285, 210, 320];
+    const hues = [265, 285, 210, 320, 45];
     state.nebulae = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       state.nebulae.push({
         x: random.range(0, FIELD.width),
         y: random.range(0, FIELD.height),
-        radius: random.range(150, 300),
+        radius: random.range(170, 320),
         hue: hues[i % hues.length],
         drift: random.range(-4, 4),
         phase: random.range(0, TAU),
+        alpha: random.range(0.22, 0.32),
       });
     }
   }
@@ -134,6 +141,9 @@ export function createWorld(random) {
     state.items = [];
     state.particles = [];
     state.floats = [];
+    state.rings = [];
+    state.shooting = null;
+    state.lastGolden = false;
     state.shake = 0;
     state.novaFlash = 0;
     state.levelBanner = 0;
@@ -147,7 +157,22 @@ export function createWorld(random) {
   }
 
   function addFloat(x, y, text, color) {
-    state.floats.push({ x, y, text, color, life: 1.1, max: 1.1 });
+    // A little sideways jitter, and a cap, so a quick run of pickups does not
+    // pile its numbers on top of each other and the HUD.
+    state.floats.push({ x: x + random.range(-14, 14), y, text, color, life: 0.95, max: 0.95 });
+    if (state.floats.length > 10) state.floats.shift();
+  }
+
+  function addRing(x, y, color) {
+    state.rings.push({ x, y, color, life: 0.45, max: 0.45 });
+    if (state.rings.length > 6) state.rings.shift();
+  }
+
+  /** When the game ends, the panel must stand alone: no banner, no leftover numbers. */
+  function clearOverlays() {
+    state.floats = [];
+    state.rings = [];
+    state.levelBanner = 0;
   }
 
   function burst(x, y, color, count, speed) {
@@ -168,30 +193,34 @@ export function createWorld(random) {
   }
 
   function spawnEmber() {
+    const golden = random.next() < GOLDEN.chance;
     state.items.push({
       kind: KIND_EMBER,
       x: random.range(30, FIELD.width - 30),
       y: -16,
       vx: 0,
       vy: random.range(EMBER.fallMin, EMBER.fallMax),
-      radius: EMBER.radius,
+      radius: golden ? GOLDEN.radius : EMBER.radius,
       rotation: 0,
       rotSpeed: 0,
       seed: random.range(0, TAU),
       active: true,
       power: null,
       shape: null,
+      golden,
     });
   }
 
   function spawnAsteroid() {
     const radius = random.range(ASTEROID.radiusMin, ASTEROID.radiusMax);
+    // Small rocks fall fast, big boulders fall slow: the field reads at a glance.
+    const band = radius > 28 ? ASTEROID.fallBig : radius < 20 ? ASTEROID.fallSmall : ASTEROID.fallMid;
     state.items.push({
       kind: KIND_ASTEROID,
       x: random.range(radius + 10, FIELD.width - radius - 10),
       y: -radius - 10,
       vx: random.range(-24, 24),
-      vy: random.range(ASTEROID.fallMin, ASTEROID.fallMax) + (state.level - 1) * ASTEROID.fallPerLevel,
+      vy: random.range(band[0], band[1]) + (state.level - 1) * ASTEROID.fallPerLevel,
       radius,
       rotation: random.range(0, TAU),
       rotSpeed: random.range(-0.9, 0.9),
@@ -199,6 +228,7 @@ export function createWorld(random) {
       active: true,
       power: null,
       shape: makeRockShape(random, radius),
+      tint: random.int(0, ASTEROID_TINTS.length - 1),
     });
   }
 
@@ -240,14 +270,17 @@ export function createWorld(random) {
   }
 
   function collectEmber(item) {
-    const gained = EMBER.score * state.combo;
+    const golden = item.golden === true;
+    const gained = (golden ? GOLDEN.score : EMBER.score) * state.combo;
     state.score += gained;
     state.embers += 1;
-    state.light = Math.min(LIGHT.max, state.light + LIGHT.emberRestore);
+    state.light = Math.min(LIGHT.max, state.light + (golden ? GOLDEN.restore : LIGHT.emberRestore));
     state.combo = Math.min(COMBO.max, state.combo + 1);
     state.comboTimer = COMBO.windowSeconds;
-    burst(item.x, item.y, '#ffc44d', 10, 130);
-    addFloat(item.x, item.y - 14, `+${gained}`, '#ffd76a');
+    state.lastGolden = golden;
+    burst(item.x, item.y, golden ? '#ffe98a' : '#ffc44d', golden ? 18 : 10, golden ? 190 : 130);
+    addRing(item.x, item.y, golden ? '#ffe98a' : '#ffd76a');
+    addFloat(item.x, item.y - 14, golden ? `GOLD +${gained}` : `+${gained}`, golden ? '#ffe98a' : '#ffd76a');
     if (state.embers >= state.level * LEVEL_EMBERS) {
       state.level += 1;
       state.score += LEVEL_BONUS * state.level;
@@ -275,6 +308,7 @@ export function createWorld(random) {
     if (state.lives <= 0) {
       state.gameOver = true;
       state.overReason = 'struck';
+      clearOverlays();
       return EVENT_HIT | EVENT_OVER;
     }
     return EVENT_HIT;
@@ -324,7 +358,7 @@ export function createWorld(random) {
       ship.y += (mouse.y - ship.y) * Math.min(1, SHIP.mouseEase * dt);
     }
     ship.x = Math.max(ship.radius, Math.min(FIELD.width - ship.radius, ship.x));
-    ship.y = Math.max(ship.radius, Math.min(FIELD.height - ship.radius, ship.y));
+    ship.y = Math.max(PLAY_TOP, Math.min(FIELD.height - ship.radius, ship.y));
     if (ship.invuln > 0) ship.invuln -= dt;
     if (ship.magnet > 0) ship.magnet -= dt;
 
@@ -342,6 +376,24 @@ export function createWorld(random) {
       nebula.phase += dt * 0.15;
       if (nebula.x < -nebula.radius) nebula.x = FIELD.width + nebula.radius;
       if (nebula.x > FIELD.width + nebula.radius) nebula.x = -nebula.radius;
+    }
+    // A shooting star now and then, so the sky itself feels alive.
+    if (state.shooting === null) {
+      if (random.next() < dt * 0.22) {
+        state.shooting = {
+          x: random.range(FIELD.width * 0.3, FIELD.width),
+          y: random.range(20, FIELD.height * 0.3),
+          vx: -random.range(380, 560),
+          vy: random.range(140, 220),
+          life: 0.8,
+          max: 0.8,
+        };
+      }
+    } else {
+      state.shooting.x += state.shooting.vx * dt;
+      state.shooting.y += state.shooting.vy * dt;
+      state.shooting.life -= dt;
+      if (state.shooting.life <= 0) state.shooting = null;
     }
 
     // A drifting title world (attract off): embers fall, nothing else happens.
@@ -366,6 +418,7 @@ export function createWorld(random) {
       state.light = 0;
       state.gameOver = true;
       state.overReason = 'dark';
+      clearOverlays();
       burst(ship.x, ship.y, '#ffd76a', 26, 200);
       return EVENT_OVER;
     }
@@ -447,7 +500,7 @@ export function createWorld(random) {
       }
     }
 
-    // Particles and floating texts age out.
+    // Particles, rings and floating texts age out.
     for (const p of state.particles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -456,8 +509,10 @@ export function createWorld(random) {
       p.life -= dt;
     }
     state.particles = state.particles.filter((p) => p.life > 0);
+    for (const r of state.rings) r.life -= dt;
+    state.rings = state.rings.filter((r) => r.life > 0);
     for (const f of state.floats) {
-      f.y -= 34 * dt;
+      f.y -= 46 * dt;
       f.life -= dt;
     }
     state.floats = state.floats.filter((f) => f.life > 0);

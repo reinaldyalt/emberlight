@@ -4,7 +4,7 @@
 // seed always gives the same frame. The play pilot looks well ahead and keeps
 // its lives; the end pilot looks only a moment ahead, so it is caught out once
 // the rocks speed up, as a hurried player is.
-import { FIELD, STEP } from './config.js';
+import { FIELD, PLAY_TOP, STEP } from './config.js';
 import { EVENT_OVER, KIND_ASTEROID, KIND_COMET, KIND_EMBER, KIND_POWER, POWER_MAGNET } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
@@ -35,7 +35,7 @@ function timeToHit(state, dir, horizon) {
   const ship = state.ship;
   for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
     const x = Math.min(FIELD.width - ship.radius, Math.max(ship.radius, ship.x + dir.x * 430 * t));
-    const y = Math.min(FIELD.height - ship.radius, Math.max(ship.radius, ship.y + dir.y * 430 * t));
+    const y = Math.min(FIELD.height - ship.radius, Math.max(PLAY_TOP, ship.y + dir.y * 430 * t));
     for (const item of state.items) {
       if (!item.active || (item.kind !== KIND_ASTEROID && item.kind !== KIND_COMET)) continue;
       const ix = item.x + item.vx * t;
@@ -80,7 +80,7 @@ function autopilot(state, horizon, reckless = false) {
   const LOOK = 0.1;
   for (const dir of DIRECTIONS) {
     const nx = Math.min(FIELD.width - ship.radius, Math.max(ship.radius, ship.x + dir.x * 430 * LOOK));
-    const ny = Math.min(FIELD.height - ship.radius, Math.max(ship.radius, ship.y + dir.y * 430 * LOOK));
+    const ny = Math.min(FIELD.height - ship.radius, Math.max(PLAY_TOP, ship.y + dir.y * 430 * LOOK));
     const closing = Math.hypot(tx - ship.x, ty - ship.y) - Math.hypot(tx - nx, ty - ny);
     if (reckless) {
       if (closing > bestSafeClosing) {

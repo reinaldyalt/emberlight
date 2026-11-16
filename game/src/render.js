@@ -2,7 +2,7 @@
 // The look is a dark nebula lit by the ship's own light: a soft glow follows the
 // wisp, embers burn gold, rocks are dull and heavy, and the dark presses in as
 // the light drains. The HUD is drawn last so it stays readable in the dark.
-import { COLORS, FIELD, LIGHT } from './config.js';
+import { ASTEROID_TINTS, COLORS, FIELD, LIGHT, LOW_LIGHT } from './config.js';
 import { KIND_ASTEROID, KIND_COMET, KIND_EMBER, KIND_POWER, POWER_MAGNET, POWER_NOVA, POWER_SHIELD } from './world.js';
 
 export const SCREEN_TITLE = 'title';
@@ -48,13 +48,13 @@ export function createRenderer(canvas) {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
 
-    // The nebulae: slow, soft, coloured clouds.
+    // The nebulae: slow, soft, coloured clouds, bright enough to see.
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const nebula of state.nebulae) {
       const breathe = 1 + 0.08 * Math.sin(nebula.phase);
       const gradient = ctx.createRadialGradient(nebula.x, nebula.y, 0, nebula.x, nebula.y, nebula.radius * breathe);
-      gradient.addColorStop(0, `hsla(${nebula.hue}, 70%, 42%, 0.16)`);
+      gradient.addColorStop(0, `hsla(${nebula.hue}, 75%, 46%, ${nebula.alpha ?? 0.28})`);
       gradient.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -73,20 +73,42 @@ export function createRenderer(canvas) {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    // A shooting star, when one is crossing.
+    if (state.shooting !== null) {
+      const s = state.shooting;
+      const alpha = Math.max(0, s.life / s.max);
+      const tail = 70;
+      const tx = s.x - (s.vx / Math.hypot(s.vx, s.vy)) * tail;
+      const ty = s.y - (s.vy / Math.hypot(s.vx, s.vy)) * tail;
+      const gradient = ctx.createLinearGradient(s.x, s.y, tx, ty);
+      gradient.addColorStop(0, `rgba(255,255,255,${0.9 * alpha})`);
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+    }
   }
 
   function drawEmber(item, time) {
-    const pulse = 1 + 0.18 * Math.sin(time * 5 + item.seed);
+    const golden = item.golden === true;
+    const pulse = 1 + (golden ? 0.24 : 0.18) * Math.sin(time * 5 + item.seed);
     const r = item.radius * pulse;
+    const glowColor = golden ? 'rgba(255,220,90,0.7)' : 'rgba(255,170,40,0.55)';
+    const bodyColor = golden ? COLORS.golden : COLORS.ember;
+    const coreColor = golden ? COLORS.goldenCore : COLORS.emberCore;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    glowCircle(ctx, item.x, item.y, r * 3.2, 'rgba(255,170,40,0.55)', 1);
+    glowCircle(ctx, item.x, item.y, r * (golden ? 4 : 3.2), glowColor, 1);
     ctx.restore();
-    ctx.fillStyle = COLORS.emberCore;
+    ctx.fillStyle = coreColor;
     ctx.beginPath();
     ctx.arc(item.x, item.y, r * 0.55, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = COLORS.ember;
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(item.x, item.y, r, 0, TAU);
     ctx.globalAlpha = 0.85;
@@ -97,9 +119,28 @@ export function createRenderer(canvas) {
     ctx.beginPath();
     ctx.arc(item.x - r * 0.3, item.y - r * 0.3, r * 0.22, 0, TAU);
     ctx.fill();
+    if (golden) {
+      // Golden embers wear a bright ring and orbiting sparks, so they stand
+      // out from the ordinary ones at a glance.
+      ctx.strokeStyle = 'rgba(255,250,220,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(item.x, item.y, r * 1.35, 0, TAU);
+      ctx.stroke();
+      for (let i = 0; i < 4; i += 1) {
+        const angle = time * 2.4 + item.seed + (i * Math.PI) / 2;
+        const sx = item.x + Math.cos(angle) * r * 1.7;
+        const sy = item.y + Math.sin(angle) * r * 1.7;
+        ctx.fillStyle = '#fffbe0';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.8, 0, TAU);
+        ctx.fill();
+      }
+    }
   }
 
   function drawAsteroid(item) {
+    const tint = ASTEROID_TINTS[item.tint ?? 2] ?? ASTEROID_TINTS[2];
     ctx.save();
     ctx.translate(item.x, item.y);
     ctx.rotate(item.rotation);
@@ -113,9 +154,9 @@ export function createRenderer(canvas) {
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = COLORS.asteroidDark;
+    ctx.fillStyle = tint.fill;
     ctx.fill();
-    ctx.strokeStyle = COLORS.asteroid;
+    ctx.strokeStyle = tint.stroke;
     ctx.lineWidth = 2;
     ctx.stroke();
     // Craters.
@@ -184,49 +225,57 @@ export function createRenderer(canvas) {
     ctx.fillText(glyph, item.x, y + 1);
   }
 
-  function drawShip(state, time) {
-    const ship = state.ship;
+  /** The wisp itself at (x, y): glow, bright core, flame tail and two eyes,
+   * so the light reads as a little creature, not a plain dot. `ship` carries
+   * shield / magnet / invuln when it is the player's ship. */
+  function drawWispBody(x, y, time, ship) {
     const blink = ship.invuln > 0 && Math.floor(time * 12) % 2 === 0;
     ctx.save();
     if (blink) ctx.globalAlpha = 0.35;
     // The trail: a soft comet of light behind the wisp.
     ctx.globalCompositeOperation = 'lighter';
-    glowCircle(ctx, ship.x, ship.y, 60, 'rgba(255,200,90,0.55)', 1);
-    glowCircle(ctx, ship.x, ship.y, 120, 'rgba(255,170,60,0.12)', 1);
+    glowCircle(ctx, x, y, 60, 'rgba(255,200,90,0.55)', 1);
+    glowCircle(ctx, x, y, 120, 'rgba(255,170,60,0.12)', 1);
     ctx.restore();
     ctx.save();
     // The wisp itself: a bright core, bigger than an ember, ringed in white
     // so the eye finds it at once, with a small flame tail below.
     ctx.fillStyle = COLORS.shipCore;
     ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 12, 0, TAU);
+    ctx.arc(x, y, 12, 0, TAU);
     ctx.fill();
     ctx.fillStyle = COLORS.shipGlow;
     ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 19, 0, TAU);
+    ctx.arc(x, y, 19, 0, TAU);
     ctx.globalAlpha = 0.55;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.strokeStyle = 'rgba(255,248,224,0.9)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 16, 0, TAU);
+    ctx.arc(x, y, 16, 0, TAU);
     ctx.stroke();
     ctx.fillStyle = '#ffb84d';
     ctx.beginPath();
-    ctx.ellipse(ship.x, ship.y + 16, 6, 11, 0, 0, TAU);
+    ctx.ellipse(x, y + 16, 6, 11, 0, 0, TAU);
+    ctx.fill();
+    // Two eyes in the core: the wisp is a creature, and the player watches it.
+    ctx.fillStyle = '#2a1c08';
+    ctx.beginPath();
+    ctx.arc(x - 4.5, y - 1.5, 2.2, 0, TAU);
+    ctx.arc(x + 4.5, y - 1.5, 2.2, 0, TAU);
     ctx.fill();
     // The shield ring, when it is held.
     if (ship.shield) {
       ctx.strokeStyle = COLORS.shield;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(ship.x, ship.y, 24 + Math.sin(time * 4) * 1.5, 0, TAU);
+      ctx.arc(x, y, 24 + Math.sin(time * 4) * 1.5, 0, TAU);
       ctx.stroke();
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = COLORS.shield;
       ctx.beginPath();
-      ctx.arc(ship.x, ship.y, 24, 0, TAU);
+      ctx.arc(x, y, 24, 0, TAU);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
@@ -236,11 +285,22 @@ export function createRenderer(canvas) {
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.arc(ship.x, ship.y, 34, time * 2, time * 2 + TAU);
+      ctx.arc(x, y, 34, time * 2, time * 2 + TAU);
       ctx.stroke();
       ctx.setLineDash([]);
     }
     ctx.restore();
+  }
+
+  function drawShip(state, time) {
+    drawWispBody(state.ship.x, state.ship.y, time, state.ship);
+  }
+
+  /** The wisp hovering over the title panel, so the title shows its hero. */
+  function drawTitleWisp(state, time) {
+    const x = FIELD.width / 2;
+    const y = 118 + Math.sin(time * 1.5) * 6;
+    drawWispBody(x, y, time, { shield: false, magnet: 0, invuln: 0 });
   }
 
   function drawParticles(state) {
@@ -252,6 +312,22 @@ export function createRenderer(canvas) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, TAU);
       ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawRings(state) {
+    ctx.save();
+    for (const r of state.rings) {
+      const progress = 1 - Math.max(0, r.life / r.max);
+      const radius = 8 + progress * 46;
+      ctx.globalAlpha = Math.max(0, r.life / r.max) * 0.8;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, radius, 0, TAU);
+      ctx.stroke();
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -347,7 +423,7 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  function drawVignette(state) {
+  function drawVignette(state, time) {
     // The dark presses in as the light drains: a radial shade centred on the
     // ship, clear inside the light and dark beyond it.
     const ship = state.ship;
@@ -358,6 +434,19 @@ export function createRenderer(canvas) {
     gradient.addColorStop(1, 'rgba(2,2,8,0.82)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+    // Nearly out of light: the edges pulse red, so the danger is felt, not read.
+    if (state.light < LOW_LIGHT) {
+      const urgency = 1 - state.light / LOW_LIGHT;
+      const pulse = 0.1 + 0.07 * Math.sin(time * 6);
+      const red = ctx.createRadialGradient(
+        FIELD.width / 2, FIELD.height / 2, Math.min(FIELD.width, FIELD.height) * 0.32,
+        FIELD.width / 2, FIELD.height / 2, Math.max(FIELD.width, FIELD.height) * 0.72,
+      );
+      red.addColorStop(0, 'rgba(255,40,40,0)');
+      red.addColorStop(1, `rgba(255,40,40,${(pulse * urgency).toFixed(3)})`);
+      ctx.fillStyle = red;
+      ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+    }
   }
 
   function drawPanel(title, lines, accent) {
@@ -425,15 +514,17 @@ export function createRenderer(canvas) {
       else if (item.kind === KIND_COMET) drawComet(item);
       else if (item.kind === KIND_POWER) drawPower(item, time);
     }
-    if (screen !== SCREEN_TITLE) drawShip(state, time);
+    if (screen === SCREEN_TITLE) drawTitleWisp(state, time);
+    else drawShip(state, time);
     drawParticles(state);
+    drawRings(state);
     drawFloats(state);
     // The nova flash washes the screen white for a beat.
     if (state.novaFlash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${state.novaFlash * 0.5})`;
       ctx.fillRect(0, 0, FIELD.width, FIELD.height);
     }
-    if (screen !== SCREEN_TITLE) drawVignette(state);
+    if (screen !== SCREEN_TITLE) drawVignette(state, time);
     ctx.restore();
 
     if (screen === SCREEN_PLAY || screen === SCREEN_PAUSED) drawHud(state, best);
@@ -441,8 +532,8 @@ export function createRenderer(canvas) {
     else if (screen === SCREEN_PAUSED) drawPaused();
     else if (screen === SCREEN_OVER) drawOver(state, best);
 
-    // The level banner, over everything.
-    if (state.levelBanner > 0) {
+    // The level banner, over everything but the game-over panel.
+    if (state.levelBanner > 0 && screen !== SCREEN_OVER) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, state.levelBanner);
       ctx.textAlign = 'center';

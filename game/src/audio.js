@@ -66,11 +66,18 @@ export function createAudio() {
       muted = !muted;
       return muted;
     },
-    /** A pickup blip; the pitch climbs with the combo. */
+    /** A pickup blip; the pitch climbs a pentatonic ladder with the combo. */
     pickup(combo) {
-      const base = 520 * Math.pow(1.059, Math.min(combo, 8));
+      const ladder = [0, 3, 5, 7, 10, 12, 15, 17];
+      const semis = ladder[Math.min(Math.max(combo, 1), 8) - 1];
+      const base = 523 * Math.pow(2, semis / 12);
       tone(base, base * 1.6, 0.12, 'sine', 0.16);
       tone(base * 2, base * 2.4, 0.08, 'triangle', 0.05);
+    },
+    /** A golden ember: a bright two-note chime. */
+    golden() {
+      tone(1047, 1568, 0.18, 'sine', 0.14);
+      tone(1568, 2093, 0.22, 'triangle', 0.08, 0.08);
     },
     /** A hit: a low thud plus noise. */
     hit() {

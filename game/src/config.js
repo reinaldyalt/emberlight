@@ -1,6 +1,8 @@
 // Emberlight — the numbers that tune the game. One place for every constant so the
 // balance (drain, speeds, spawn rates, scores) is easy to read and to change.
 export const FIELD = { width: 960, height: 640 };
+/** The top of the play area, below the HUD strip, so the wisp and its glow never wash out the score text. */
+export const PLAY_TOP = 120;
 export const STEP = 1 / 60;
 export const BEST_KEY = 'emberlight-best';
 
@@ -43,23 +45,42 @@ export const EMBER = {
   fallMin: 55,
   fallMax: 95,
   /** Seconds between ember spawns at level 1; shrinks per level. */
-  spawnSeconds: 0.85,
+  spawnSeconds: 0.72,
   spawnPerLevel: 0.05,
   spawnMin: 0.4,
+};
+
+/** A golden ember: rare, bright, worth chasing. */
+export const GOLDEN = {
+  /** Chance that a spawned ember is golden. */
+  chance: 0.08,
+  radius: 12,
+  score: 50,
+  /** Light restored by a golden ember. */
+  restore: 22,
 };
 
 /** An asteroid: the thing you dodge. */
 export const ASTEROID = {
   radiusMin: 16,
   radiusMax: 34,
-  fallMin: 70,
-  fallMax: 150,
+  /** Small rocks fall fast, big boulders fall slow. */
+  fallSmall: [130, 180],
+  fallMid: [85, 140],
+  fallBig: [60, 100],
   /** Extra fall speed per level. */
   fallPerLevel: 9,
-  spawnSeconds: 1.5,
+  spawnSeconds: 1.35,
   spawnPerLevel: 0.09,
   spawnMin: 0.62,
 };
+
+/** The three rock looks: slate, rust and ash. */
+export const ASTEROID_TINTS = [
+  { fill: '#454554', stroke: '#7d86a0' },
+  { fill: '#5d4238', stroke: '#a8765e' },
+  { fill: '#5d534b', stroke: '#8a7f74' },
+];
 
 /** A comet: fast, diagonal, rare. */
 export const COMET = {
@@ -95,6 +116,8 @@ export const NOVA_POINTS = 25;
 export const COLORS = {
   ember: '#ffc44d',
   emberCore: '#fff3c4',
+  golden: '#ffd94d',
+  goldenCore: '#fffbe0',
   asteroid: '#8a7f74',
   asteroidDark: '#5d534b',
   comet: '#9fe8ff',
@@ -106,3 +129,6 @@ export const COLORS = {
   text: '#f5f1e6',
   dim: '#b9b3a4',
 };
+
+/** Below this much light the dark starts to close in and warn the player. */
+export const LOW_LIGHT = 28;
