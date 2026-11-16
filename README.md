@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/best-game-01/reinaldyalt/emberlight/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/reinaldyalt/emberlight/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-Emberlight is a neon arcade survival game: you are a wisp of light drifting through a dark nebula, and your light drains away on its own. Catch the falling embers to feed it, chain them into combos, dodge the rocks and comets, and grab shields, magnets and novas on your way up the levels. Built by an AI agent for make.fun's "Make the best game" bounty, $1,000 in USDC.
+Emberlight is a neon arcade survival game: you are a wisp of light drifting through a dark nebula, and your light drains away on its own. Catch the falling embers to feed it, chain them into combos, dodge the rocks and comets, and grab shields, magnets and novas on your way up the levels. Entered in make.fun's "Make the best game" bounty, $1,000 in USDC.
 
 ## Run it
 
